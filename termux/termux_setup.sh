@@ -11,7 +11,7 @@
 # - Author: Diwas Neupane (techdiwas)
 # - Version: generic:1.6
 # - Date: 20231225
-# - Last modified: 20250911
+# - Last modified: 20260210
 #
 #        - Changes for (20230802)  - make it clear that this script is not ready.
 #        - Changes for (20230803)  - make it clear that this script is ready.
@@ -89,7 +89,7 @@ check_inputs() {
 
 # update Termux's environment
 update_environment() {
-  yes | pkg update;
+  pkg update;
   yes | pkg upgrade;
 }
 
@@ -259,7 +259,7 @@ clone_github_repo() {
         exit 1;
     fi
 
-    echo "-- Repository found and SSH and GPG keys are copied.";
+    echo "-- Repository exists, so SSH and GPG keys are copied.";
     echo "-- Now, you can successful restore SSH and GPG keys.";
 
     # cleanup repo
@@ -373,7 +373,7 @@ restore_ssh_key() {
 
 # do all the work!
 WorkNow() {
-    local SCRIPT_VERSION="20250911";
+    local SCRIPT_VERSION="20260210";
     local START=$(date);
     local STOP=$(date);
     echo "$0, v$SCRIPT_VERSION";
@@ -414,6 +414,7 @@ WorkNow() {
             install_packages;
             ;;
       "ssg")
+            change_settings;
             setup_storage;
             setup_repo;
             update_environment;
