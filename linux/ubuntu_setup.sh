@@ -1,18 +1,61 @@
 #!/bin/bash
 
-# Copyright (C) 2025 Diwas Neupane
+# Copyright (C) 2026 Diwas Neupane
 # SPDX-License-Identifier: Apache-2.0
-# Ubuntu Set Up Script (Adapted from Termux version)
+# Ubuntu Set Up Script
 
 # *******************************************************************************
 # - Script to generate an SSH key for connection and, a GPG key for security.
 # - Upgrades Ubuntu packages and, installs vim, git, openssh, gnupg, etc. packages.
 # - Generates an SSH key as well as a GPG key for adding them to GitHub's account.
 # - Author: Diwas Neupane (techdiwas)
-# - Version: ubuntu:1.0
-# - Date: 20251002
-# - Adapted for Ubuntu from Termux version
+# - Version: ubuntu:1.6
+# - Date: 20231225
+# - Last modified: 20260321
+#
+#        - Changes for (20230802)  - make it clear that this script is not ready.
+#        - Changes for (20230803)  - make it clear that this script is ready.
+#        - Changes for (20231020)  - generate an SSH key and, a GPG key by following official method guided by GitHub.
+#        - Changes for (20231020)  - support for creating and, restoring backup.
+#        - Changes for (20231224)  - support to restore gnupg files even if system is fresh.
+#        - Changes for (20231225)  - separately back up and restore ssh and gpg keys.
+#        - Changes for (20250606)  - introduce email and username validation. Also, improved overall script.
+#        - Changes for (20250701)  - set up gh for login into user's GitHub account and nano as a default editor for git.
+#        - Changes for (20250705)  - auto copy required files from Downloads folder for restoring purposes.
+#        - Changes for (20250811)  - edit shell profile settings (used for Ubuntu).
+#        - Changes for (20250911)  - clone SSH and GPG keys from GitHub repository and perform misc changes.
+#
 # *******************************************************************************
+
+# edit shell profile settings (replaces Termux's termux.properties)
+change_settings() {
+    local input;
+    echo "-- Change shell profile settings (~/.bashrc) ? [Y/n]"
+    read input;
+    if [ "$input" = 'Y' ] || [ "$input" = 'y' ]; then
+        nano ~/.bashrc;
+        source ~/.bashrc;
+    fi
+}
+
+# check whether the Downloads directory exists or not (replaces termux-setup-storage)
+setup_storage() {
+    if [ -d "$HOME/Downloads" ]; then
+        echo "-- Downloads directory exists. No need to create it.";
+    else
+        echo "-- Downloads directory is missing.";
+        echo "-- Creating Downloads directory...";
+        mkdir -p "$HOME/Downloads";
+        echo "-- Downloads directory created at $HOME/Downloads.";
+    fi
+}
+
+# configure apt mirror/repository (replaces termux-change-repo)
+setup_repo() {
+    echo "-- Opening /etc/apt/sources.list for editing...";
+    echo "-- (You can change your apt mirror here.)";
+    sudo nano /etc/apt/sources.list;
+}
 
 # validation of username and email
 validate_email() {
@@ -41,17 +84,35 @@ check_inputs() {
   if [ "$input" = 'y' ] || [ "$input" = 'Y' ]; then
       echo "-- Enter name of the package you want to install:";
       read package_name;
-      extra_packages="$package_name gh";
+      extra_packages="$package_name";
   else
-      extra_packages="gh";
+      extra_packages="";
   fi
 }
 
 # update Ubuntu's environment
 update_environment() {
-  echo "-- Updating system packages...";
   sudo apt update;
-  sudo apt upgrade -y;
+  yes | sudo apt upgrade;
+}
+
+# install gh CLI via GitHub's official apt repository (not available in standard apt)
+install_gh() {
+  if dpkg -s gh >/dev/null 2>&1; then
+    echo "-- gh is already installed.";
+    return 0;
+  fi
+  echo "-- Adding GitHub CLI apt repository...";
+  sudo apt install -y wget;
+  sudo mkdir -p -m 755 /etc/apt/keyrings;
+  wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null;
+  sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg;
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null;
+  sudo apt update;
+  sudo apt install gh -y;
+  echo "-- gh has been installed.";
 }
 
 # install required packages
@@ -59,8 +120,9 @@ install_packages() {
   echo "-----------------------------------";
   echo "-- Installing required packages ...";
   echo "-----------------------------------";
-  sudo apt install git openssh-client gnupg $extra_packages -y;
-  echo "-- Required packages has been installed.";
+  sudo apt install -y git openssh-client gnupg nano $extra_packages;
+  install_gh;
+  echo "-- Required packages have been installed.";
 }
 
 # generate an SSH key
@@ -123,19 +185,13 @@ config_editor() {
 
 # login to user's GitHub account
 config_gh() {
-  # check if gh is installed
-  if command -v gh >/dev/null 2>&1; then
+  # when gh is not installed, install it
+  if dpkg -s gh >/dev/null 2>&1; then
     echo "-- gh is installed.";
   else
     echo "-- gh is not installed.";
     echo "-- Installing gh...";
-    # Install GitHub CLI
-    type -p curl >/dev/null || sudo apt install curl -y;
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg;
-    sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg;
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null;
-    sudo apt update;
-    sudo apt install gh -y;
+    install_gh;
   fi
   # login to user's GitHub account via gh
   gh auth login;
@@ -199,12 +255,12 @@ clone_github_repo() {
 
     sudo apt update;
     # when git is not installed
-    if command -v git >/dev/null 2>&1; then
+    if dpkg -s git >/dev/null 2>&1; then
       echo "-- git is installed.";
     else
       echo "-- git is not installed.";
       echo "-- Installing git...";
-      sudo apt install git -y;
+      sudo apt install -y git;
     fi
     git clone https://github.com/"$github_username"/"$github_repo_name".git;
 
@@ -212,20 +268,21 @@ clone_github_repo() {
         cp $github_repo_name/id_gpg_public $github_repo_name/id_gpg_private $github_repo_name/gpg_ownertrust $HOME;
         echo "-- Files copied to $HOME.";
     else
-        echo "-- No GPG files found in $github_repo_name.";
+        echo "-- No files found in $github_repo_name.";
+        exit 1;
     fi
-    
     if [ -f $github_repo_name/id_rsa ] && [ -f $github_repo_name/id_rsa.pub ]; then
         cp $github_repo_name/id_rsa $github_repo_name/id_rsa.pub $HOME;
-        echo "-- SSH files copied to $HOME.";
+        echo "-- Files copied to $HOME.";
     elif [ -f $github_repo_name/id_ed25519 ] && [ -f $github_repo_name/id_ed25519.pub ]; then
         cp $github_repo_name/id_ed25519 $github_repo_name/id_ed25519.pub $HOME;
-        echo "-- SSH files copied to $HOME.";
+        echo "-- Files copied to $HOME.";
     else
-        echo "-- No SSH files found in $github_repo_name.";
+        echo "-- No files found in $github_repo_name.";
+        exit 1;
     fi
 
-    echo "-- Repository found and SSH and GPG keys are copied.";
+    echo "-- Repository exists, so SSH and GPG keys are copied.";
     echo "-- Now, you can successfully restore SSH and GPG keys.";
 
     # cleanup repo
@@ -240,40 +297,48 @@ restore_gpg_key() {
 
   sudo apt update;
   # when GNU Privacy Guard (gnupg) is not installed
-  if command -v gpg >/dev/null 2>&1; then
+  if dpkg -s gnupg >/dev/null 2>&1; then
     echo "-- GNU Privacy Guard (gnupg) is installed.";
   else
     echo "-- GNU Privacy Guard (gnupg) is not installed.";
     echo "-- Installing GNU Privacy Guard (gnupg)...";
-    sudo apt install gnupg -y;
+    sudo apt install -y gnupg;
   fi
 
-  # check if files are in $HOME (from clone_github_repo or manual copy)
+  # assume files are in Downloads dir (replaces storage/shared/Download)
+  int_storage="$HOME/Downloads";
+  # check if files are already in $HOME at first. (ref clone_github_repo)
   if [ -f $HOME/id_gpg_public ] && [ -f $HOME/id_gpg_private ] && [ -f $HOME/gpg_ownertrust ]; then
       echo "-- Files are in $HOME.";
+  elif [ -f $int_storage/id_gpg_public ] && [ -f $int_storage/id_gpg_private ] && [ -f $int_storage/gpg_ownertrust ]; then
+      cp $int_storage/id_gpg_public $int_storage/id_gpg_private $int_storage/gpg_ownertrust $HOME;
+      echo "-- Files copied to $HOME.";
   else
-      echo "-- No GPG backup files found in $HOME.";
-      echo "-- Please ensure id_gpg_public, id_gpg_private, and gpg_ownertrust are in $HOME.";
+      echo "-- No files found in $int_storage.";
       exit 1;
   fi
 
-  gpg --import ~/id_gpg_public;
-  gpg --import ~/id_gpg_private;
-  gpg --import-ownertrust ~/gpg_ownertrust;
+  if [ -f $HOME/id_gpg_public ] && [ -f $HOME/id_gpg_private ] && [ -f $HOME/gpg_ownertrust ]; then
+      gpg --import ~/id_gpg_public;
+      gpg --import ~/id_gpg_private;
+      gpg --import ~/gpg_ownertrust;
+  else
+     echo "-- No files exist in $HOME to restore.";
+     exit 1;
+  fi
 
   gpg --list-secret-keys --keyid-format=long;
   echo "-- Enter GPG key ID:";
   read gpg_key_id;
 
   # Set up trust
-  echo "-- Setting up trust level (enter 'trust', then '5', then 'y', then 'quit')";
   gpg --edit-key "$gpg_key_id";
   gpg --list-secret-keys --keyid-format=long;
 
   # configure git for signing key
   git config --global commit.gpgsign true;
   git config --global user.signingkey $gpg_key_id;
-  echo "-- GPG key restored.";
+  echo "-- Restored.";
 
   # cleanup
   rm id_gpg_public id_gpg_private gpg_ownertrust;
@@ -287,19 +352,32 @@ restore_ssh_key() {
 
   sudo apt update;
   # when OpenSSH client is not installed
-  if command -v ssh >/dev/null 2>&1; then
+  if dpkg -s openssh-client >/dev/null 2>&1; then
     echo "-- OpenSSH client is installed.";
   else
     echo "-- OpenSSH client is not installed.";
     echo "-- Installing OpenSSH client...";
-    sudo apt install openssh-client -y;
+    sudo apt install -y openssh-client;
   fi
 
-  # Ensure .ssh directory exists
-  mkdir -p $HOME/.ssh;
-  chmod 700 $HOME/.ssh;
+  # assume files are in Downloads dir (replaces storage/shared/Download)
+  int_storage="$HOME/Downloads";
+  # check if files are already in $HOME at first. (ref clone_github_repo)
+  if [ -f $HOME/id_rsa ] && [ -f $HOME/id_rsa.pub ]; then
+      echo "-- Files are in $HOME.";
+  elif [ -f $HOME/id_ed25519 ] && [ -f $HOME/id_ed25519.pub ]; then
+      echo "-- Files are in $HOME.";
+  elif [ -f $int_storage/id_rsa ] && [ -f $int_storage/id_rsa.pub ]; then
+      cp $int_storage/id_rsa $int_storage/id_rsa.pub $HOME;
+      echo "-- Files copied to $HOME.";
+  elif [ -f $int_storage/id_ed25519 ] && [ -f $int_storage/id_ed25519.pub ]; then
+      cp $int_storage/id_ed25519 $int_storage/id_ed25519.pub $HOME;
+      echo "-- Files copied to $HOME.";
+  else
+      echo "-- No files found in $int_storage.";
+      exit 1;
+  fi
 
-  # check if files are in $HOME (from clone_github_repo or manual copy)
   if [ -f $HOME/id_rsa ] && [ -f $HOME/id_rsa.pub ]; then
       mv $HOME/id_rsa $HOME/id_rsa.pub $HOME/.ssh;
       chmod 600 $HOME/.ssh/id_rsa;
@@ -315,22 +393,21 @@ restore_ssh_key() {
       eval "$(ssh-agent -s)";
       ssh-add ~/.ssh/id_ed25519;
   else
-      echo "-- No SSH key backup found in $HOME.";
-      echo "-- Please ensure id_rsa/id_ed25519 and corresponding .pub files are in $HOME.";
-      exit 1;
+      echo "-- No SSH key backup found.";
   fi
-  echo "-- SSH key restored successfully.";
+  echo "-- Restored.";
 }
 
 # do all the work!
 WorkNow() {
-    local SCRIPT_VERSION="ubuntu:1.0-20251002";
+    local SCRIPT_VERSION="20260321";
     local START=$(date);
+    local STOP=$(date);
     echo "$0, v$SCRIPT_VERSION";
     check_inputs;
     echo "-- What do you want to do today ?";
-    echo "-- Setup Ubuntu Environment (s).";
-    echo "-- Setup Ubuntu Environment Plus Configure SSH And GPG Keys (ssg).";
+    echo "-- Setup Ubuntu's Environment (s).";
+    echo "-- Setup Ubuntu's Environment Plus Configure SSH And GPG Keys (ssg).";
     echo "-- Restore from GitHub (rgit).";
     echo "-- Restore SSH Key (rssh).";
     echo "-- Restore GPG Key (rgpg).";
@@ -357,10 +434,16 @@ WorkNow() {
             config_gh;
             ;;
         "s")
+            change_settings;
+            setup_storage;
+            setup_repo;
             update_environment;
             install_packages;
             ;;
         "ssg")
+            change_settings;
+            setup_storage;
+            setup_repo;
             update_environment;
             install_packages;
             config_gh;
@@ -371,8 +454,7 @@ WorkNow() {
             show_ssh_and_gpg_public_keys;
             echo "-- Now, you can copy your SSH as well as GPG public keys and, add them to your GitHub's account.";
             ;;
-        *)
-            local STOP=$(date);
+          *)
             echo "-- Start time = $START";
             echo "-- Stop time = $STOP";
             exit 0;
