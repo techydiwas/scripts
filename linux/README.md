@@ -16,7 +16,7 @@ bash ubuntu_setup.sh
 
 ---
 
-## Memory Tweaks
+## Memory Tweaks (Generally Not Recommanded)
 
 To clear buff/cache and swap:
 
@@ -38,7 +38,7 @@ sudo nano /etc/sysctl.d/99-swap-tweaks.conf
 Add these lines:
 
 ```bash
-vm.swappiness=50
+vm.swappiness=10
 vm.vfs_cache_pressure=50
 vm.dirty_background_ratio=5
 vm.dirty_ratio=10
